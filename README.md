@@ -81,9 +81,42 @@ scripts/            smoke test
 | 1    | Project scaffold, tooling, routing skeleton | Done   |
 | 2    | Theme layer and base components (A-006)     | Done   |
 | 3    | App shell and navigation (A-003, A-004)     | Done   |
-| 4    | Login and 2FA (A-001, A-002)                | Next   |
-| 5    | Resource framework (A-005)                  | —      |
+| 4    | Login and 2FA (A-001, A-002)                | Done   |
+| 5    | Resource framework (A-005)                  | Next   |
 | 6    | Markets, zones and taxonomy (A-011 … A-018) | —      |
+
+## Authentication
+
+Two-factor is **mandatory**. A correct password never signs anyone in — it only
+advances to a code challenge, or to enrolment on a first sign-in. `RequireAuth`
+treats a half-finished sign-in as signed out, so 2FA cannot be skipped by
+typing a URL.
+
+TOTP is implemented properly (RFC 6238, verified against the published test
+vectors) rather than stubbed, so the enrolment QR works with a real
+authenticator app. `src/lib/auth/totp.ts` mirrors what the server will do.
+
+Policy, matching what the server will enforce:
+
+| Rule             | Value                                               |
+| ---------------- | --------------------------------------------------- |
+| Failed attempts  | 5, then a 15-minute lockout                         |
+| Unknown email    | Reported identically to a wrong password            |
+| Recovery codes   | 8, single use, shown once at enrolment              |
+| Secret persisted | Only after the user proves they can generate a code |
+
+### Sign in during development
+
+Demo accounts are listed on the login screen — one per role, all sharing the
+password `Plataforma2026!`. On first sign-in you will be asked to enrol: either
+scan the QR with an authenticator app, or use the **development code hint**
+below the card, which shows the code the secret is currently producing.
+
+**`src/lib/auth/mock-auth.ts` is not security.** Passwords are compared in
+plaintext in the browser and the TOTP secret lives in `localStorage`. Both are
+impossible in production, where the server holds the secret, hashes with
+Argon2id, and enforces lockout somewhere the client cannot clear it. The whole
+module, and the development code hint, are deleted when the API lands.
 
 ## Navigation and permissions
 
@@ -93,15 +126,14 @@ menu entry because both are generated from it.
 
 Each entry declares the permission required to see it. A viewer without it does
 not get a disabled link: **the item, and its group if empty, disappear
-entirely.** Verify with the role switcher in the user menu — a `support` role
-sees 6 of 37 screens and no Finanzas group at all.
+entirely.** Sign in as `sofia.nunez@plataforma.mx` (Soporte) to see it — 6 of
+37 screens, and no Finanzas group at all.
 
 Hiding is UX, not security. The server re-checks every permission on every
 request; `RequirePermission` only catches arrivals by bookmark or stale role.
 
 Until `GET /admin/me` exists, `SessionProvider` supplies the session with the
-real value shape, and the role switcher is a temporary affordance to make the
-filtering reviewable. Both go when auth lands (A-001).
+real value shape, reading it from the mock auth module.
 
 ## Testing
 

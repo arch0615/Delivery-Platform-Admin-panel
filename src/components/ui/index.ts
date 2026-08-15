@@ -1,3 +1,4 @@
+export { Alert, type AlertProps, type AlertTone } from '@/components/ui/Alert'
 export { Badge, type BadgeProps, type BadgeTone } from '@/components/ui/Badge'
 export {
   Button,

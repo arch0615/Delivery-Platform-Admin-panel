@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
-import { Outlet } from 'react-router'
+import { Outlet, useNavigate } from 'react-router'
 
+import { useCurrentUser } from '@/app/session-context'
 import { Breadcrumbs } from '@/components/shell/Breadcrumbs'
 import { ConnectionIndicator } from '@/components/shell/ConnectionIndicator'
 import { IdleWarningDialog } from '@/components/shell/IdleWarningDialog'
@@ -15,11 +16,13 @@ const WARN_AFTER_MS = 25 * 60 * 1000
 const SIGN_OUT_AFTER_MS = 30 * 60 * 1000
 
 export function AppShell() {
+  const { signOut: endSession } = useCurrentUser()
+  const navigate = useNavigate()
+
   const signOut = useCallback(() => {
-    // Real sign-out revokes the session server-side and redirects to /login.
-    // That lands with A-001; for now the flow is observable end to end.
-    window.alert('Sesión cerrada por inactividad. El flujo real llega con A-001.')
-  }, [])
+    endSession()
+    void navigate('/login', { replace: true })
+  }, [endSession, navigate])
 
   const idle = useIdleTimer({
     warnAfterMs: WARN_AFTER_MS,

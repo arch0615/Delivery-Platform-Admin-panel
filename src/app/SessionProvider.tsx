@@ -2,31 +2,56 @@ import { useCallback, useMemo, useState, type ReactNode } from 'react'
 
 import {
   SESSION_MARKET_KEY,
-  SESSION_ROLE_KEY,
   SessionContext,
   type AdminUser,
+  type AuthStatus,
+  type EnrollmentDraft,
+  type PendingSignIn,
 } from '@/app/session-context'
+import {
+  beginEnrollment,
+  clearSession,
+  confirmEnrollment,
+  findAccount,
+  login as mockLogin,
+  readSession,
+  verifyCode as mockVerifyCode,
+  verifyRecoveryCode as mockVerifyRecoveryCode,
+  writeSession,
+  type CodeResult,
+  type LoginResult,
+} from '@/lib/auth/mock-auth'
+import { verifyTotp } from '@/lib/auth/totp'
 import { MARKETS, findMarket, type Market } from '@/lib/markets'
-import { ROLES, hasAnyPermission, hasPermission, type RoleCode } from '@/lib/permissions'
+import { ROLES, hasAnyPermission, hasPermission } from '@/lib/permissions'
 
 /*
- * Stands in for GET /admin/me until the API exists (A-003 dependency).
- * The value shape is the real one, so swapping in the fetch is a local change.
+ * Session state.
  *
- * NOTE: the market is persisted to localStorage here. Once the resource
- * framework (A-005) introduces URL-driven state, the selected market moves
- * into the URL as well so admin views stay shareable.
+ * Auth calls go through src/lib/auth/mock-auth.ts, which stands in for the
+ * real endpoints. When they exist, this provider changes only in that those
+ * functions become fetches - the state machine here is unchanged.
  */
 
-const SEED_USER: Omit<AdminUser, 'roleCode'> = {
-  id: '9a3f1e2b-0000-4000-8000-000000000001',
-  name: 'Alex Ramírez',
-  email: 'alex.ramirez@plataforma.mx',
+const NO_PERMISSIONS: readonly string[] = []
+
+function accountToUser(email: string): AdminUser | null {
+  const account = findAccount(email)
+  if (!account) {
+    return null
+  }
+
+  return {
+    id: account.id,
+    name: account.name,
+    email: account.email,
+    roleCode: account.roleCode,
+  }
 }
 
-function readStoredRole(): RoleCode {
-  const stored = localStorage.getItem(SESSION_ROLE_KEY)
-  return stored !== null && stored in ROLES ? (stored as RoleCode) : 'super_admin'
+function readInitialUser(): AdminUser | null {
+  const session = readSession()
+  return session ? accountToUser(session.email) : null
 }
 
 function readStoredMarket(): Market {
@@ -37,13 +62,13 @@ function readStoredMarket(): Market {
 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [roleCode, setRoleCodeState] = useState<RoleCode>(readStoredRole)
+  const [user, setUser] = useState<AdminUser | null>(readInitialUser)
+  const [status, setStatus] = useState<AuthStatus>(() =>
+    readInitialUser() ? 'signed_in' : 'signed_out',
+  )
+  const [pending, setPending] = useState<PendingSignIn | null>(null)
+  const [enrollmentDraft, setEnrollmentDraft] = useState<EnrollmentDraft | null>(null)
   const [market, setMarketState] = useState<Market>(readStoredMarket)
-
-  const setRoleCode = useCallback((next: RoleCode) => {
-    localStorage.setItem(SESSION_ROLE_KEY, next)
-    setRoleCodeState(next)
-  }, [])
 
   const setMarketId = useCallback((marketId: string) => {
     const next = findMarket(marketId)
@@ -54,12 +79,106 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setMarketState(next)
   }, [])
 
+  const signIn = useCallback((email: string, password: string): LoginResult => {
+    const result = mockLogin(email, password)
+
+    if (result.status === 'needs_code') {
+      setPending(result.challenge)
+      setEnrollmentDraft(null)
+      setStatus('awaiting_code')
+    } else if (result.status === 'needs_enrollment') {
+      setPending(result.challenge)
+      setEnrollmentDraft(beginEnrollment())
+      setStatus('enrolling')
+    }
+
+    return result
+  }, [])
+
+  const completeSignIn = useCallback((email: string) => {
+    writeSession(email)
+    setUser(accountToUser(email))
+    setPending(null)
+    setEnrollmentDraft(null)
+    setStatus('signed_in')
+  }, [])
+
+  const submitCode = useCallback(
+    async (code: string): Promise<CodeResult> => {
+      if (!pending) {
+        return { status: 'invalid', attemptsRemaining: 0 }
+      }
+
+      const result = await mockVerifyCode(pending.email, code)
+      if (result.status === 'ok') {
+        completeSignIn(pending.email)
+      }
+
+      return result
+    },
+    [pending, completeSignIn],
+  )
+
+  const submitRecoveryCode = useCallback(
+    (code: string): CodeResult => {
+      if (!pending) {
+        return { status: 'invalid', attemptsRemaining: 0 }
+      }
+
+      const result = mockVerifyRecoveryCode(pending.email, code)
+      if (result.status === 'ok') {
+        completeSignIn(pending.email)
+      }
+
+      return result
+    },
+    [pending, completeSignIn],
+  )
+
+  /**
+   * Finish enrolment. The secret is only persisted once the user proves they
+   * can generate a code from it - otherwise a mis-scanned QR would lock them
+   * out of their own account on the next sign-in.
+   */
+  const confirmEnrollmentCode = useCallback(
+    async (code: string): Promise<boolean> => {
+      if (!pending || !enrollmentDraft) {
+        return false
+      }
+
+      const valid = await verifyTotp(enrollmentDraft.secret, code, { window: 1 })
+      if (!valid) {
+        return false
+      }
+
+      confirmEnrollment(pending.email, enrollmentDraft.secret, enrollmentDraft.recoveryCodes)
+      completeSignIn(pending.email)
+      return true
+    },
+    [pending, enrollmentDraft, completeSignIn],
+  )
+
+  const cancelSignIn = useCallback(() => {
+    setPending(null)
+    setEnrollmentDraft(null)
+    setStatus('signed_out')
+  }, [])
+
+  const signOut = useCallback(() => {
+    clearSession()
+    setUser(null)
+    setPending(null)
+    setEnrollmentDraft(null)
+    setStatus('signed_out')
+  }, [])
+
   const value = useMemo(() => {
-    const role = ROLES[roleCode]
-    const permissions = role.permissions
+    const role = user ? ROLES[user.roleCode] : null
+    const permissions = role ? role.permissions : NO_PERMISSIONS
 
     return {
-      user: { ...SEED_USER, roleCode },
+      status,
+      user,
       role,
       permissions,
       can: (permission: string) => hasPermission(permissions, permission),
@@ -67,9 +186,29 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       markets: MARKETS,
       market,
       setMarketId,
-      setRoleCode,
+      pending,
+      enrollmentDraft,
+      signIn,
+      submitCode,
+      submitRecoveryCode,
+      confirmEnrollmentCode,
+      cancelSignIn,
+      signOut,
     }
-  }, [roleCode, market, setMarketId, setRoleCode])
+  }, [
+    status,
+    user,
+    market,
+    setMarketId,
+    pending,
+    enrollmentDraft,
+    signIn,
+    submitCode,
+    submitRecoveryCode,
+    confirmEnrollmentCode,
+    cancelSignIn,
+    signOut,
+  ])
 
   return <SessionContext value={value}>{children}</SessionContext>
 }

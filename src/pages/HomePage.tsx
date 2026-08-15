@@ -1,7 +1,7 @@
 import { Link } from 'react-router'
 
 import { NAV_GROUPS } from '@/app/nav'
-import { useSession } from '@/app/session-context'
+import { useCurrentUser } from '@/app/session-context'
 import { PageHeader } from '@/components/shell/PageHeader'
 import { Badge, Card, CardBody, CardHeader } from '@/components/ui'
 
@@ -41,7 +41,7 @@ const STATUS_TONE = {
 } as const
 
 export function HomePage() {
-  const { user, role, market, can } = useSession()
+  const { user, role, market, can } = useCurrentUser()
 
   const totalItems = NAV_GROUPS.reduce((count, group) => count + group.items.length, 0)
   const visibleItems = NAV_GROUPS.reduce(
@@ -107,7 +107,7 @@ export function HomePage() {
             )}
 
             <p className="mt-4 text-xs text-ink-subtle">
-              Cambia de rol desde el menú de usuario para comprobarlo. Ocultar un botón es
+              Cierra sesión y entra con otra cuenta para comprobarlo. Ocultar un botón es
               experiencia de usuario, no seguridad: el servidor vuelve a validar cada petición.
             </p>
           </CardBody>

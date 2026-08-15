@@ -1,7 +1,7 @@
 import { Lock } from 'lucide-react'
 import { Link } from 'react-router'
 
-import { useSession } from '@/app/session-context'
+import { useCurrentUser } from '@/app/session-context'
 import { Button, Card, CardBody, EmptyState } from '@/components/ui'
 
 export type ForbiddenPageProps = {
@@ -15,7 +15,7 @@ export type ForbiddenPageProps = {
  * such routes, but hiding is not enforcement.
  */
 export function ForbiddenPage({ permission }: ForbiddenPageProps) {
-  const { role } = useSession()
+  const { role } = useCurrentUser()
 
   return (
     <div className="mx-auto max-w-xl px-6 py-16">

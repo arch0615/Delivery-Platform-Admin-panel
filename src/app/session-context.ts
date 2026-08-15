@@ -1,9 +1,9 @@
 import { createContext, use } from 'react'
 
+import type { CodeResult, LoginResult } from '@/lib/auth/mock-auth'
 import type { Market } from '@/lib/markets'
 import type { Permission, Role, RoleCode } from '@/lib/permissions'
 
-export const SESSION_ROLE_KEY = 'admin.session.role'
 export const SESSION_MARKET_KEY = 'admin.session.market'
 
 export type AdminUser = {
@@ -13,25 +13,50 @@ export type AdminUser = {
   roleCode: RoleCode
 }
 
+/**
+ * Sign-in is a state machine, not a boolean. Two-factor is mandatory, so
+ * `awaiting_code` and `enrolling` are real states that hold a half-finished
+ * sign-in - neither grants access to any admin screen.
+ */
+export type AuthStatus = 'signed_out' | 'awaiting_code' | 'enrolling' | 'signed_in'
+
+export type PendingSignIn = {
+  email: string
+  name: string
+}
+
+export type EnrollmentDraft = {
+  secret: string
+  recoveryCodes: string[]
+}
+
 export type SessionContextValue = {
-  user: AdminUser
-  role: Role
+  status: AuthStatus
+
+  /** Non-null only when status is 'signed_in'. */
+  user: AdminUser | null
+  role: Role | null
   permissions: readonly Permission[]
 
-  /** UI-level permission check. The server re-checks on every request. */
+  /** Deny-all while signed out. */
   can: (permission: Permission) => boolean
   canAny: (permissions: readonly Permission[]) => boolean
 
-  /** Markets this admin may act in. A single entry hides the selector. */
   markets: readonly Market[]
   market: Market
   setMarketId: (marketId: string) => void
 
-  /**
-   * TEMPORARY. Lets the role be switched from the UI so permission filtering
-   * is reviewable before GET /admin/me exists. Remove when auth lands (A-001).
-   */
-  setRoleCode: (roleCode: RoleCode) => void
+  /** Set while a sign-in is half finished. */
+  pending: PendingSignIn | null
+  /** Secret and recovery codes offered during enrolment, before confirmation. */
+  enrollmentDraft: EnrollmentDraft | null
+
+  signIn: (email: string, password: string) => LoginResult
+  submitCode: (code: string) => Promise<CodeResult>
+  submitRecoveryCode: (code: string) => CodeResult
+  confirmEnrollmentCode: (code: string) => Promise<boolean>
+  cancelSignIn: () => void
+  signOut: () => void
 }
 
 export const SessionContext = createContext<SessionContextValue | null>(null)
@@ -44,4 +69,23 @@ export function useSession(): SessionContextValue {
   }
 
   return value
+}
+
+export type AuthenticatedSession = Omit<SessionContextValue, 'user' | 'role'> & {
+  user: AdminUser
+  role: Role
+}
+
+/**
+ * Narrowed session for screens behind RequireAuth, so they do not each have to
+ * null-check a user that is guaranteed present.
+ */
+export function useCurrentUser(): AuthenticatedSession {
+  const session = useSession()
+
+  if (session.status !== 'signed_in' || !session.user || !session.role) {
+    throw new Error('useCurrentUser must be used inside RequireAuth')
+  }
+
+  return { ...session, user: session.user, role: session.role }
 }
