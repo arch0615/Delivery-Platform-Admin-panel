@@ -76,14 +76,62 @@ scripts/            smoke test
 
 ## Build progress
 
-| Step | Scope                                       | Status |
-| ---- | ------------------------------------------- | ------ |
-| 1    | Project scaffold, tooling, routing skeleton | Done   |
-| 2    | Theme layer and base components (A-006)     | Done   |
-| 3    | App shell and navigation (A-003, A-004)     | Done   |
-| 4    | Login and 2FA (A-001, A-002)                | Done   |
-| 5    | Resource framework (A-005)                  | Next   |
-| 6    | Markets, zones and taxonomy (A-011 … A-018) | —      |
+| Step | Scope                                        | Status |
+| ---- | -------------------------------------------- | ------ |
+| 1    | Project scaffold, tooling, routing skeleton  | Done   |
+| 2    | Theme layer and base components (A-006)      | Done   |
+| 3    | App shell and navigation (A-003, A-004)      | Done   |
+| 4    | Login and 2FA (A-001, A-002)                 | Done   |
+| 5    | Resource framework (A-005) + Markets (A-011) | Done   |
+| 6    | Zones and taxonomy (A-012 … A-018)           | Next   |
+
+## Resource framework
+
+Most admin screens are the same shape: a filterable table, permission-gated
+actions, a detail panel. `src/framework` declares that shape once, so the
+remaining list screens are configuration rather than bespoke pages.
+
+`src/features/markets/MarketsPage.tsx` is the reference implementation — the
+whole Markets screen (A-011) below the edit drawer is one `defineResource`
+call.
+
+```ts
+defineResource<Market>({
+  key: 'markets',
+  permission: 'platform.manage',
+  columns: [...],      // sortable, hideable, with explicit CSV values
+  filters: [...],      // select and boolean, rendered into the URL
+  fetch: (query) => ..., // server-shaped: page, sort, filters in; rows + total out
+  rowActions: [...],   // permission-gated, with confirmation rules
+})
+```
+
+What comes for free:
+
+- **Filters, sort and pagination live in the URL.** Operators share links, and
+  the back button works. Any change other than paging resets to page 1.
+- **All four list states**: loading skeleton, error with retry, "nothing exists
+  yet", and "nothing matches your filters" — which are different messages.
+- **Actions the viewer cannot perform are absent, not disabled**, matching the
+  sidebar rule.
+- **Destructive actions require typed confirmation.** The operator types the
+  record's code to proceed, which forces them to read which row they are on. A
+  dialog people dismiss reflexively is not a control.
+- **CSV export** covers the filtered set, not the visible page, escapes values
+  Excel would execute as formulas, and hands off to a queued job above
+  `SYNC_EXPORT_LIMIT` rows rather than silently truncating.
+
+Search is accent-insensitive: operators type "Bogota" and "Merida" mid-shift,
+and a search that misses on accents reads as missing data.
+
+Per architecture risk AR3, an admin screen that cannot be expressed here is a
+design-review trigger, not a new hand-built page.
+
+### Known follow-up
+
+The production bundle is a single ~535 kB chunk (~160 kB gzipped). Acceptable
+for an internal tool on desktop, but route-level code splitting should land
+before the screen count grows much further.
 
 ## Authentication
 

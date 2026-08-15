@@ -1,6 +1,8 @@
+import type { ReactElement } from 'react'
 import { createBrowserRouter } from 'react-router'
 
 import { NAV_GROUPS } from '@/app/nav'
+import { MarketsPage } from '@/features/markets/MarketsPage'
 import { RequireAuth } from '@/app/RequireAuth'
 import { RequirePermission } from '@/app/RequirePermission'
 import { AppShell } from '@/components/shell/AppShell'
@@ -19,12 +21,21 @@ import { TwoFactorPage } from '@/pages/auth/TwoFactorPage'
  * a route and its sidebar entry cannot drift apart. Each sits behind two
  * gates: RequireAuth (signed in, two-factor complete) and RequirePermission.
  */
+/**
+ * Screens that are built. Everything else falls back to a placeholder that
+ * reports its ID and scheduled sprint, so clicking through the shell shows
+ * exactly what is real.
+ */
+const BUILT_SCREENS: Record<string, ReactElement> = {
+  '/settings/markets': <MarketsPage />,
+}
+
 const generatedRoutes = NAV_GROUPS.flatMap((group) =>
   group.items.map((item) => ({
     path: item.path,
     element: (
       <RequirePermission permission={item.permission}>
-        <PlaceholderPage />
+        {BUILT_SCREENS[item.path] ?? <PlaceholderPage />}
       </RequirePermission>
     ),
   })),

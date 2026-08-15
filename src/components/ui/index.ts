@@ -8,6 +8,7 @@ export {
 } from '@/components/ui/Button'
 export { Card, CardBody, CardFooter, CardHeader } from '@/components/ui/Card'
 export { DateTime, type DateTimeDisplay, type DateTimeProps } from '@/components/ui/DateTime'
+export { Drawer, type DrawerProps } from '@/components/ui/Drawer'
 export { EmptyState, type EmptyStateProps } from '@/components/ui/EmptyState'
 export { Field, FormRow, type FieldProps } from '@/components/ui/Field'
 export {

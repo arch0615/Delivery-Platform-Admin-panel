@@ -25,7 +25,7 @@ const ROUTES = [
   { path: '/ops/orders', expect: 'Pedidos en vivo', shot: 'ops-orders' },
   { path: '/finance/payouts', expect: 'Dispersiones', shot: null },
   { path: '/compliance/blackouts', expect: 'Ley seca', shot: null },
-  { path: '/settings/zones', expect: 'Zonas', shot: null },
+  { path: '/settings/markets', expect: 'Ciudad de México', shot: 'markets' },
   { path: '/ui', expect: 'Sistema de diseño', shot: 'ui-gallery' },
   { path: '/no-such-route', expect: 'Página no encontrada', shot: null },
 ]
@@ -157,17 +157,21 @@ if (takeShots) {
   const page = await context.newPage()
   const problems = watch(page)
 
-  // Every admin route must bounce to /login while signed out.
-  await page.goto(`${baseUrl}/finance/payouts`, { waitUntil: 'networkidle' })
-  if (!page.url().endsWith('/login')) {
-    problems.push(`expected redirect to /login, landed on ${page.url()}`)
+  // Every admin route must bounce to /login while signed out. The redirect
+  // happens in React, which can run after networkidle on a cold dev server,
+  // so wait for the URL rather than sampling it.
+  const expectRedirectToLogin = async (from) => {
+    await page.goto(`${baseUrl}${from}`, { waitUntil: 'domcontentloaded' })
+    try {
+      await page.waitForURL((url) => url.pathname === '/login', { timeout: 15_000 })
+    } catch {
+      problems.push(`expected ${from} to redirect to /login, landed on ${page.url()}`)
+    }
   }
 
-  // Two-factor cannot be skipped by going straight to the app.
-  await page.goto(`${baseUrl}/login/2fa`, { waitUntil: 'networkidle' })
-  if (!page.url().endsWith('/login')) {
-    problems.push(`2fa without a challenge should bounce to /login, got ${page.url()}`)
-  }
+  await expectRedirectToLogin('/finance/payouts')
+  // Two-factor cannot be skipped by going straight to the challenge.
+  await expectRedirectToLogin('/login/2fa')
 
   if (takeShots) {
     await page.goto(`${baseUrl}/login`, { waitUntil: 'networkidle' })
@@ -318,6 +322,141 @@ for (const testCase of ROLE_CASES) {
   }
 
   report(`role: ${testCase.email}`, problems)
+  await page.close()
+}
+
+// ------------------------------------------------------------ framework ---
+
+/*
+ * The resource framework, exercised on the Markets screen (A-011).
+ *
+ * Filters, sort and pagination must survive a reload, because operators share
+ * URLs. That is the property worth testing in a browser: the unit tests cover
+ * the query logic, but only a real navigation proves the URL round-trips.
+ */
+{
+  const page = await context.newPage()
+  const problems = watch(page)
+
+  try {
+    await signIn(page, ADMIN_EMAIL)
+    await page.goto(`${baseUrl}/settings/markets`, { waitUntil: 'networkidle' })
+
+    const rowCount = async () => page.locator('tbody tr').count()
+
+    // The list query starts after the first render, so networkidle can fire
+    // while the skeleton is still showing. Wait for an actual row.
+    const waitForRows = async () => {
+      await page.locator('tbody tr').first().waitFor({ state: 'visible', timeout: 15_000 })
+    }
+
+    try {
+      await waitForRows()
+    } catch {
+      problems.push('expected market rows to render')
+    }
+
+    // Search narrows, and lands in the URL.
+    await page.getByPlaceholder('Buscar por nombre o código…').fill('bogota')
+    await page.waitForFunction(() => window.location.search.includes('q=bogota'), undefined, {
+      timeout: 10_000,
+    })
+    await page.waitForTimeout(600)
+
+    // Accent-insensitive: "bogota" must find "Bogotá".
+    const searchedBody = await page.textContent('tbody')
+    if (!searchedBody?.includes('Bogotá')) {
+      problems.push('accent-insensitive search did not match "Bogotá"')
+    }
+
+    // Reload: filters live in the URL, so they must survive it.
+    await page.reload({ waitUntil: 'networkidle' })
+    if (!page.url().includes('q=bogota')) {
+      problems.push('search term did not survive a reload')
+    }
+
+    // A filter that matches nothing shows the "no matches" state, distinct
+    // from "nothing exists yet". Wait for it rather than guessing at the
+    // debounce plus request time.
+    await page.getByPlaceholder('Buscar por nombre o código…').fill('zzzzzz')
+    try {
+      await page.getByText('Sin coincidencias').waitFor({ state: 'visible', timeout: 10_000 })
+    } catch {
+      problems.push('expected the filtered-empty state')
+    }
+
+    if (takeShots) {
+      await page.screenshot({ path: `${SHOT_DIR}/markets-empty.png`, fullPage: true })
+    }
+
+    // Clear, then sort by a column and confirm it reaches the URL.
+    // "Limpiar" is exact: the empty state also offers "Limpiar filtros".
+    await page.getByRole('button', { name: 'Limpiar', exact: true }).click()
+    await page.waitForFunction(() => !window.location.search.includes('q='), undefined, {
+      timeout: 10_000,
+    })
+
+    await page.getByRole('button', { name: /^Código/ }).click()
+    await page.waitForFunction(() => window.location.search.includes('sort=code'), undefined, {
+      timeout: 10_000,
+    })
+
+    // Pagination: 28 seeded markets over a page size of 25.
+    await page.getByRole('button', { name: 'Página siguiente' }).click()
+    await page.waitForFunction(() => window.location.search.includes('page=2'), undefined, {
+      timeout: 10_000,
+    })
+
+    try {
+      await waitForRows()
+      if ((await rowCount()) !== 3) {
+        problems.push(`expected 3 rows on page 2 of 28, got ${await rowCount()}`)
+      }
+    } catch {
+      problems.push('page 2 rendered no rows')
+    }
+  } catch (error) {
+    problems.push(`framework check failed: ${error.message}`)
+  }
+
+  report('framework: url-driven filters, sort and pagination', problems)
+  await page.close()
+}
+
+{
+  // Typed confirmation guards destructive actions.
+  const page = await context.newPage()
+  const problems = watch(page)
+
+  try {
+    await signIn(page, ADMIN_EMAIL)
+    await page.goto(`${baseUrl}/settings/markets?q=merida`, { waitUntil: 'networkidle' })
+    await page.waitForTimeout(600)
+
+    await page.getByRole('button', { name: 'Acciones' }).first().click()
+    await page.getByRole('menuitem', { name: 'Eliminar' }).click()
+
+    const confirmButton = page.getByRole('button', { name: 'Eliminar definitivamente' })
+    await confirmButton.waitFor({ state: 'visible', timeout: 10_000 })
+
+    if (!(await confirmButton.isDisabled())) {
+      problems.push('confirm should stay disabled until the code is typed')
+    }
+
+    // Typing the wrong code must not enable it.
+    await page.getByLabel(/Escribe "/).fill('WRONG')
+    if (!(await confirmButton.isDisabled())) {
+      problems.push('confirm enabled by an incorrect typed confirmation')
+    }
+
+    if (takeShots) {
+      await page.screenshot({ path: `${SHOT_DIR}/typed-confirmation.png`, fullPage: true })
+    }
+  } catch (error) {
+    problems.push(`confirmation check failed: ${error.message}`)
+  }
+
+  report('framework: destructive action needs typed confirmation', problems)
   await page.close()
 }
 

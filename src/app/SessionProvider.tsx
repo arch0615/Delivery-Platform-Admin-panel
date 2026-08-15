@@ -22,7 +22,7 @@ import {
   type LoginResult,
 } from '@/lib/auth/mock-auth'
 import { verifyTotp } from '@/lib/auth/totp'
-import { MARKETS, findMarket, type Market } from '@/lib/markets'
+import { findMarket, liveMarkets, type Market } from '@/lib/markets'
 import { ROLES, hasAnyPermission, hasPermission } from '@/lib/permissions'
 
 /*
@@ -54,11 +54,14 @@ function readInitialUser(): AdminUser | null {
   return session ? accountToUser(session.email) : null
 }
 
+/** The selector offers live markets only - a paused one carries no traffic. */
 function readStoredMarket(): Market {
+  const available = liveMarkets()
   const stored = localStorage.getItem(SESSION_MARKET_KEY)
   const market = stored === null ? undefined : findMarket(stored)
-  // MARKETS is a non-empty constant, so index 0 always exists.
-  return market ?? (MARKETS[0] as Market)
+
+  // The seed always contains at least one live market.
+  return market ?? (available[0] as Market)
 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {
@@ -183,7 +186,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       permissions,
       can: (permission: string) => hasPermission(permissions, permission),
       canAny: (required: readonly string[]) => hasAnyPermission(permissions, required),
-      markets: MARKETS,
+      markets: liveMarkets(),
       market,
       setMarketId,
       pending,
