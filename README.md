@@ -40,19 +40,27 @@ The dev server runs at http://localhost:5173.
 | `npm run lint:fix`     | Run ESLint with autofix             |
 | `npm run format`       | Format `src/` with Prettier         |
 | `npm run format:check` | Verify formatting without writing   |
+| `npm test`             | Run unit tests once                 |
+| `npm run test:watch`   | Run unit tests in watch mode        |
+| `npm run smoke`        | Browser smoke test (needs `dev`)    |
+| `npm run smoke:shots`  | Smoke test plus screenshots         |
 
 ## Project structure
 
 ```
 src/
-  app/        router, providers, application shell
-  pages/      route components, one per screen in the page register
-  index.css   Tailwind entry point and design tokens
-  main.tsx    application entry point
+  app/              router, providers, session, navigation model
+  components/
+    shell/          sidebar, header, breadcrumbs, idle timeout
+    ui/             design-system primitives
+  hooks/            shared behaviour hooks
+  lib/              formatters, permissions, class merging, seed data
+  pages/            route components, one per screen in the page register
+  index.css         Tailwind entry point and design tokens
+scripts/            smoke test
 ```
 
-Directories for `components/`, `features/`, and `lib/` are added as the steps
-that need them land.
+`features/` is added when the first data-backed screen lands.
 
 ## Stack notes
 
@@ -72,9 +80,41 @@ that need them land.
 | ---- | ------------------------------------------- | ------ |
 | 1    | Project scaffold, tooling, routing skeleton | Done   |
 | 2    | Theme layer and base components (A-006)     | Done   |
-| 3    | App shell and navigation (A-003)            | Next   |
-| 4    | Login and 2FA (A-001, A-002)                | —      |
+| 3    | App shell and navigation (A-003, A-004)     | Done   |
+| 4    | Login and 2FA (A-001, A-002)                | Next   |
 | 5    | Resource framework (A-005)                  | —      |
+| 6    | Markets, zones and taxonomy (A-011 … A-018) | —      |
+
+## Navigation and permissions
+
+`src/app/nav.ts` is the single source of truth for the sidebar, the
+breadcrumbs, and the route table — a route cannot drift out of sync with its
+menu entry because both are generated from it.
+
+Each entry declares the permission required to see it. A viewer without it does
+not get a disabled link: **the item, and its group if empty, disappear
+entirely.** Verify with the role switcher in the user menu — a `support` role
+sees 6 of 37 screens and no Finanzas group at all.
+
+Hiding is UX, not security. The server re-checks every permission on every
+request; `RequirePermission` only catches arrivals by bookmark or stale role.
+
+Until `GET /admin/me` exists, `SessionProvider` supplies the session with the
+real value shape, and the role switcher is a temporary affordance to make the
+filtering reviewable. Both go when auth lands (A-001).
+
+## Testing
+
+| Command               | What it covers                                         |
+| --------------------- | ------------------------------------------------------ |
+| `npm test`            | Unit tests (Vitest) — permission matching, nav filters |
+| `npm run smoke`       | Loads every route in Chromium; fails on console errors |
+| `npm run smoke:shots` | Same, plus screenshots to `.screenshots/`              |
+
+The smoke test needs the dev server running. It exists because **a 200 from
+Vite proves nothing** — Vite serves `index.html` for every path, so a
+completely broken app still answers 200 everywhere. Only a real browser load
+catches a render failure.
 
 ## Design system
 
