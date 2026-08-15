@@ -3,6 +3,7 @@ import { createBrowserRouter } from 'react-router'
 
 import { NAV_GROUPS } from '@/app/nav'
 import { MarketsPage } from '@/features/markets/MarketsPage'
+import { ZonesPage } from '@/features/zones/ZonesPage'
 import { RequireAuth } from '@/app/RequireAuth'
 import { RequirePermission } from '@/app/RequirePermission'
 import { AppShell } from '@/components/shell/AppShell'
@@ -28,6 +29,7 @@ import { TwoFactorPage } from '@/pages/auth/TwoFactorPage'
  */
 const BUILT_SCREENS: Record<string, ReactElement> = {
   '/settings/markets': <MarketsPage />,
+  '/settings/zones': <ZonesPage />,
 }
 
 const generatedRoutes = NAV_GROUPS.flatMap((group) =>

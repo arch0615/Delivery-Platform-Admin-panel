@@ -26,6 +26,7 @@ const ROUTES = [
   { path: '/finance/payouts', expect: 'Dispersiones', shot: null },
   { path: '/compliance/blackouts', expect: 'Ley seca', shot: null },
   { path: '/settings/markets', expect: 'Ciudad de México', shot: 'markets' },
+  { path: '/settings/zones', expect: 'Centro Histórico', shot: 'zones' },
   { path: '/ui', expect: 'Sistema de diseño', shot: 'ui-gallery' },
   { path: '/no-such-route', expect: 'Página no encontrada', shot: null },
 ]
@@ -269,8 +270,19 @@ for (const route of ROUTES) {
       problems.push(`HTTP ${response ? response.status() : 'no response'}`)
     }
 
-    const body = await page.textContent('body')
-    if (!body || !body.includes(route.expect)) {
+    // Wait for the text rather than sampling: data-backed screens resolve
+    // their query after the first render, which is after networkidle.
+    //
+    // Matching on body text rather than a locator on purpose - getByText can
+    // settle on a hidden <option> in the market selector and then wait forever
+    // for it to become visible.
+    try {
+      await page.waitForFunction(
+        (needle) => (document.body.innerText ?? '').includes(needle),
+        route.expect,
+        { timeout: 15_000 },
+      )
+    } catch {
       problems.push(`missing expected text: "${route.expect}"`)
     }
 
@@ -407,13 +419,19 @@ for (const testCase of ROLE_CASES) {
       timeout: 10_000,
     })
 
+    // 28 seeded markets over a page size of 25 leaves 3 on page 2. Wait for
+    // the count: the URL changes before React refetches, so sampling straight
+    // after the click still sees page 1.
     try {
-      await waitForRows()
-      if ((await rowCount()) !== 3) {
-        problems.push(`expected 3 rows on page 2 of 28, got ${await rowCount()}`)
-      }
+      await page.waitForFunction(
+        () => document.querySelectorAll('tbody tr').length === 3,
+        undefined,
+        {
+          timeout: 15_000,
+        },
+      )
     } catch {
-      problems.push('page 2 rendered no rows')
+      problems.push(`expected 3 rows on page 2 of 28, got ${await rowCount()}`)
     }
   } catch (error) {
     problems.push(`framework check failed: ${error.message}`)
@@ -457,6 +475,103 @@ for (const testCase of ROLE_CASES) {
   }
 
   report('framework: destructive action needs typed confirmation', problems)
+  await page.close()
+}
+
+// ----------------------------------------------------------- zone editor ---
+
+/*
+ * A-012 zone polygon editor.
+ *
+ * Clicks the map canvas directly and checks that the ring, its area and the
+ * overlap warning all respond, then that the drawn zone saves. The geometry
+ * itself is covered by unit tests; what only a browser can prove is that
+ * clicks become vertices.
+ *
+ * CAVEAT: this does NOT verify that the polygon is painted on the map.
+ * MapLibre parses GeoJSON sources on a web worker, and in headless Chromium
+ * those tiles never materialise - a minimal, freshly created map with a single
+ * GeoJSON source reports zero features too, so it is the environment and not
+ * this application. Raster basemap tiles render fine because they are plain
+ * images. Rendering has to be checked by eye in a real browser.
+ */
+{
+  const page = await context.newPage()
+  const problems = watch(page)
+
+  try {
+    await signIn(page, ADMIN_EMAIL)
+    await page.goto(`${baseUrl}/settings/zones`, { waitUntil: 'networkidle' })
+    await page.locator('tbody tr').first().waitFor({ state: 'visible', timeout: 15_000 })
+
+    await page.getByRole('button', { name: 'Nueva zona' }).click()
+
+    const map = page.getByTestId('zone-map')
+    await map.waitFor({ state: 'visible', timeout: 20_000 })
+    // The WebGL canvas needs a frame before it accepts hit-testing.
+    await page.waitForTimeout(1500)
+
+    const box = await map.boundingBox()
+    if (!box) {
+      throw new Error('map has no bounding box')
+    }
+
+    // Draw a quadrilateral by clicking four corners inside the canvas.
+    const corners = [
+      [0.35, 0.35],
+      [0.6, 0.35],
+      [0.6, 0.6],
+      [0.35, 0.6],
+    ]
+
+    for (const [fx, fy] of corners) {
+      await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy)
+      await page.waitForTimeout(250)
+    }
+
+    const panel = page.locator('aside')
+
+    // Four clicks must become four points.
+    const pointsText = await panel.getByText('Puntos').locator('..').textContent()
+    if (!pointsText?.includes('4')) {
+      problems.push(`expected 4 points after 4 clicks, panel read "${pointsText?.trim()}"`)
+    }
+
+    // With a closed ring the area readout must be a real figure, not a dash.
+    const areaText = await panel.getByText('Área').locator('..').textContent()
+    if (!areaText || !/km²/.test(areaText)) {
+      problems.push(`expected an area in km², panel read "${areaText?.trim()}"`)
+    }
+
+    // Drawn over central CDMX, the ring should intersect the seeded zones.
+    const panelText = await panel.textContent()
+    if (!panelText?.includes('Se traslapa con')) {
+      problems.push('expected an overlap warning against the seeded CDMX zones')
+    }
+
+    if (takeShots) {
+      await page.screenshot({ path: `${SHOT_DIR}/zone-editor.png`, fullPage: false })
+    }
+
+    // Save requires a name; without one the button stays available but the
+    // form refuses and reports why.
+    await page.getByLabel('Nombre de la zona').fill('Zona de prueba')
+    await page.getByRole('button', { name: 'Crear zona' }).click()
+
+    // The list refetches after the editor closes, so wait for the new row.
+    try {
+      await page
+        .locator('tbody')
+        .getByText('Zona de prueba')
+        .waitFor({ state: 'visible', timeout: 15_000 })
+    } catch {
+      problems.push('the drawn zone did not appear in the list after saving')
+    }
+  } catch (error) {
+    problems.push(`zone editor check failed: ${error.message}`)
+  }
+
+  report('zones: draw a polygon, see area and overlap, save', problems)
   await page.close()
 }
 

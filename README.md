@@ -83,7 +83,36 @@ scripts/            smoke test
 | 3    | App shell and navigation (A-003, A-004)      | Done   |
 | 4    | Login and 2FA (A-001, A-002)                 | Done   |
 | 5    | Resource framework (A-005) + Markets (A-011) | Done   |
-| 6    | Zones and taxonomy (A-012 … A-018)           | Next   |
+| 6    | Zone polygon editor (A-012)                  | Done   |
+| 7    | Taxonomy (A-016 … A-018)                     | Next   |
+
+## Zone editor (A-012)
+
+`src/lib/geo.ts` holds the geometry: spherical area, point-in-polygon,
+segment intersection, self-intersection and ring overlap. The server is the
+authority on geometry — these exist so the editor can warn _before_ saving.
+
+Two failures they prevent:
+
+- **A self-intersecting ring** renders happily in the browser and is then
+  rejected by PostGIS, so the zone silently fails to save.
+- **An unnoticed overlap** silently reroutes orders. Overlaps are legal —
+  `priority` breaks the tie — so the editor reports them rather than blocking.
+
+MapLibre is loaded lazily: it is ~800 kB, and support and finance roles never
+open a map. Set `VITE_MAP_TILE_URL` to a real tile provider — the default is
+OpenStreetMap, which is fine for development but not for production traffic
+under their tile usage policy.
+
+### Verification caveat
+
+The smoke test proves that clicks become vertices, that area and overlap
+warnings respond, and that a drawn zone saves. It does **not** prove the
+polygon is painted, because MapLibre parses GeoJSON on a web worker and those
+tiles never materialise in headless Chromium — a minimal freshly created map
+with one GeoJSON source reports zero features there too. Raster basemap tiles
+render fine, being plain images. **Check the drawn outline by eye in a real
+browser.**
 
 ## Resource framework
 
@@ -129,9 +158,9 @@ design-review trigger, not a new hand-built page.
 
 ### Known follow-up
 
-The production bundle is a single ~535 kB chunk (~160 kB gzipped). Acceptable
-for an internal tool on desktop, but route-level code splitting should land
-before the screen count grows much further.
+The main bundle is ~178 kB gzipped, with MapLibre split into a ~244 kB chunk
+that only loads when the zone editor opens. Route-level code splitting is still
+worth doing before the screen count grows much further.
 
 ## Authentication
 
