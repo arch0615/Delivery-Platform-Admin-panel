@@ -71,7 +71,23 @@ that need them land.
 | Step | Scope                                       | Status |
 | ---- | ------------------------------------------- | ------ |
 | 1    | Project scaffold, tooling, routing skeleton | Done   |
-| 2    | Theme layer and base components (A-006)     | Next   |
-| 3    | App shell and navigation (A-003)            | —      |
+| 2    | Theme layer and base components (A-006)     | Done   |
+| 3    | App shell and navigation (A-003)            | Next   |
 | 4    | Login and 2FA (A-001, A-002)                | —      |
 | 5    | Resource framework (A-005)                  | —      |
+
+## Design system
+
+A living style guide runs at [`/ui`](http://localhost:5173/ui) with a
+light / dark / system toggle. Check a component there in both themes before
+using it.
+
+Two rules the component layer depends on:
+
+1. **Semantic tokens only.** Use `bg-surface`, `text-ink-muted`, `border-border-base`.
+   A raw palette class such as `bg-slate-200` inside a component is a bug — it
+   will not respond to the theme.
+2. **Money goes through `<Money>`, dates through `<DateTime>`.** Amounts are
+   integer minor units plus a currency code; rates are basis points. Rendering
+   `amount / 100` inline loses the currency, the locale rules, and the column
+   alignment.

@@ -6,6 +6,22 @@
     <meta name="robots" content="noindex, nofollow" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Panel Administrativo</title>
+    <script>
+      // Set the theme before first paint, otherwise a dark-theme user sees a
+      // white flash on every load. Mirrors src/app/ThemeProvider.tsx.
+      ;(function () {
+        try {
+          var stored = localStorage.getItem('admin.theme')
+          var dark =
+            stored === 'dark' ||
+            ((stored === null || stored === 'system') &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+        } catch (_) {
+          document.documentElement.dataset.theme = 'light'
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

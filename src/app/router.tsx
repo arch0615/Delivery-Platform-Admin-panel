@@ -2,6 +2,7 @@ import { createBrowserRouter } from 'react-router'
 
 import { HomePage } from '@/pages/HomePage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
+import { UiGalleryPage } from '@/pages/UiGalleryPage'
 
 /*
  * Route table for the admin panel.
@@ -14,6 +15,12 @@ export const router = createBrowserRouter([
   {
     path: '/',
     element: <HomePage />,
+  },
+  {
+    // Living style guide for the design system. Stays in the app - it is how
+    // components get reviewed in both themes before they are used.
+    path: '/ui',
+    element: <UiGalleryPage />,
   },
   {
     path: '*',

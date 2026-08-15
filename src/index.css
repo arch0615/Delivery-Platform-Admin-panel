@@ -1,19 +1,141 @@
 @import 'tailwindcss';
 
 /*
- * Minimal token set for the scaffold. The full admin theme layer (A-006 in the
- * work schedule) replaces this with the shared design-system tokens.
+ * ADMIN DESIGN TOKENS (A-006)
+ *
+ * Two layers, deliberately:
+ *
+ *   1. Raw CSS variables on :root and [data-theme='dark'] below. These hold the
+ *      actual colour values and are the only place a hex code appears.
+ *   2. `@theme inline` maps them onto Tailwind's colour scale, so utilities
+ *      like `bg-surface` or `text-ink-muted` compile to `var(--admin-*)`
+ *      rather than to a copied literal.
+ *
+ * `inline` is what makes runtime theme switching work: flipping the
+ * data-theme attribute on <html> re-resolves every utility, with no rebuild
+ * and no duplicated dark: variants scattered through the components.
+ *
+ * RULE: components use semantic tokens only (surface, ink, accent, danger…).
+ * A raw palette value such as `bg-slate-200` in a component is a bug - it will
+ * not respond to the theme.
  */
-@theme {
-  --color-surface: #ffffff;
-  --color-surface-muted: #f8fafc;
-  --color-border-subtle: #e2e8f0;
-  --color-ink: #0f172a;
-  --color-ink-muted: #64748b;
-  --color-accent: #1d4ed8;
-  --color-positive: #15803d;
+
+/* ---------------------------------------------------------------- light --- */
+:root {
+  color-scheme: light;
+
+  /* surfaces */
+  --admin-surface: #ffffff;
+  --admin-surface-muted: #f8fafc;
+  --admin-surface-sunken: #f1f5f9;
+  --admin-surface-inverted: #0f172a;
+
+  /* borders */
+  --admin-border: #e2e8f0;
+  --admin-border-strong: #cbd5e1;
+
+  /* text */
+  --admin-ink: #0f172a;
+  --admin-ink-muted: #475569;
+  --admin-ink-subtle: #94a3b8;
+  --admin-ink-inverted: #f8fafc;
+
+  /* primary action */
+  --admin-accent: #1d4ed8;
+  --admin-accent-hover: #1e40af;
+  --admin-accent-soft: #eff6ff;
+  --admin-accent-ink: #ffffff;
+
+  /* status */
+  --admin-positive: #15803d;
+  --admin-positive-soft: #f0fdf4;
+  --admin-warning: #b45309;
+  --admin-warning-soft: #fffbeb;
+  --admin-danger: #b91c1c;
+  --admin-danger-hover: #991b1b;
+  --admin-danger-soft: #fef2f2;
+  --admin-info: #0369a1;
+  --admin-info-soft: #f0f9ff;
+
+  /* elevation */
+  --admin-shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.05);
+  --admin-shadow-raised: 0 4px 12px -2px rgb(15 23 42 / 0.1);
 }
 
+/* ----------------------------------------------------------------- dark --- */
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --admin-surface: #0f172a;
+  --admin-surface-muted: #020617;
+  --admin-surface-sunken: #1e293b;
+  --admin-surface-inverted: #f8fafc;
+
+  --admin-border: #1e293b;
+  --admin-border-strong: #334155;
+
+  --admin-ink: #f1f5f9;
+  --admin-ink-muted: #94a3b8;
+  --admin-ink-subtle: #64748b;
+  --admin-ink-inverted: #0f172a;
+
+  --admin-accent: #3b82f6;
+  --admin-accent-hover: #60a5fa;
+  --admin-accent-soft: #172554;
+  --admin-accent-ink: #f8fafc;
+
+  --admin-positive: #4ade80;
+  --admin-positive-soft: #052e16;
+  --admin-warning: #fbbf24;
+  --admin-warning-soft: #451a03;
+  --admin-danger: #f87171;
+  --admin-danger-hover: #fca5a5;
+  --admin-danger-soft: #450a0a;
+  --admin-info: #38bdf8;
+  --admin-info-soft: #082f49;
+
+  --admin-shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --admin-shadow-raised: 0 4px 12px -2px rgb(0 0 0 / 0.5);
+}
+
+/* ------------------------------------------------- tailwind token bridge --- */
+@theme inline {
+  --color-surface: var(--admin-surface);
+  --color-surface-muted: var(--admin-surface-muted);
+  --color-surface-sunken: var(--admin-surface-sunken);
+  --color-surface-inverted: var(--admin-surface-inverted);
+
+  --color-border-base: var(--admin-border);
+  --color-border-strong: var(--admin-border-strong);
+
+  --color-ink: var(--admin-ink);
+  --color-ink-muted: var(--admin-ink-muted);
+  --color-ink-subtle: var(--admin-ink-subtle);
+  --color-ink-inverted: var(--admin-ink-inverted);
+
+  --color-accent: var(--admin-accent);
+  --color-accent-hover: var(--admin-accent-hover);
+  --color-accent-soft: var(--admin-accent-soft);
+  --color-accent-ink: var(--admin-accent-ink);
+
+  --color-positive: var(--admin-positive);
+  --color-positive-soft: var(--admin-positive-soft);
+  --color-warning: var(--admin-warning);
+  --color-warning-soft: var(--admin-warning-soft);
+  --color-danger: var(--admin-danger);
+  --color-danger-hover: var(--admin-danger-hover);
+  --color-danger-soft: var(--admin-danger-soft);
+  --color-info: var(--admin-info);
+  --color-info-soft: var(--admin-info-soft);
+
+  --shadow-card: var(--admin-shadow-card);
+  --shadow-raised: var(--admin-shadow-raised);
+
+  /* Tabular figures matter: money columns must align vertically. */
+  --font-mono: ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', 'Roboto Mono', Menlo, monospace;
+}
+
+/* ------------------------------------------------------------- base css --- */
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
@@ -21,8 +143,8 @@
 
   body {
     margin: 0;
-    background-color: var(--color-surface-muted);
-    color: var(--color-ink);
+    background-color: var(--admin-surface-muted);
+    color: var(--admin-ink);
     font-family:
       ui-sans-serif,
       system-ui,
@@ -30,17 +152,21 @@
       'Segoe UI',
       Roboto,
       sans-serif;
-    font-feature-settings: 'cv02', 'cv03', 'cv04';
   }
 
-  /* The admin panel is a desktop tool. Below this width layouts are not
-     supported, so make the viewport scroll rather than silently reflow. */
+  /* The admin panel is a desktop tool (layouts target 1280px and up). Below
+     this width the viewport scrolls rather than silently reflowing. */
   #root {
     min-width: 320px;
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--admin-accent);
     outline-offset: 2px;
+  }
+
+  /* Money and identifiers use tabular figures so columns line up. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
   }
 }
