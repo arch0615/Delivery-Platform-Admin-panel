@@ -27,6 +27,9 @@ const ROUTES = [
   { path: '/compliance/blackouts', expect: 'Ley seca', shot: null },
   { path: '/settings/markets', expect: 'Ciudad de México', shot: 'markets' },
   { path: '/settings/zones', expect: 'Centro Histórico', shot: 'zones' },
+  { path: '/catalog/verticals', expect: 'Restaurantes', shot: 'verticals' },
+  { path: '/catalog/categories', expect: 'Mexicana', shot: 'categories' },
+  { path: '/catalog/restricted-items', expect: 'tabaco', shot: null },
   { path: '/ui', expect: 'Sistema de diseño', shot: 'ui-gallery' },
   { path: '/no-such-route', expect: 'Página no encontrada', shot: null },
 ]
@@ -572,6 +575,95 @@ for (const testCase of ROLE_CASES) {
   }
 
   report('zones: draw a polygon, see area and overlap, save', problems)
+  await page.close()
+}
+
+// -------------------------------------------------------- category tree ---
+
+/*
+ * A-017 category tree.
+ *
+ * The tree operations are unit-tested; what a browser adds is proof that the
+ * buttons are wired to them and that the rendered hierarchy actually changes.
+ */
+{
+  const page = await context.newPage()
+  const problems = watch(page)
+
+  try {
+    await signIn(page, ADMIN_EMAIL)
+    await page.goto(`${baseUrl}/catalog/categories`, { waitUntil: 'networkidle' })
+
+    const rowNames = async () =>
+      page
+        .locator('ul > li')
+        .evaluateAll((items) =>
+          items.map((item) => item.querySelector('span > span')?.textContent?.trim() ?? ''),
+        )
+
+    await page.getByText('Mexicana').first().waitFor({ state: 'visible', timeout: 15_000 })
+
+    const before = await rowNames()
+    if (!before.includes('Mexicana') || !before.includes('Tacos')) {
+      problems.push(`expected the seeded tree, saw ${JSON.stringify(before.slice(0, 6))}`)
+    }
+
+    // Collapsing a parent must hide its children.
+    await page.getByRole('button', { name: 'Colapsar Mexicana' }).click()
+    await page.waitForFunction(
+      () => !(document.body.innerText ?? '').includes('Tortas y tortas ahogadas'),
+      undefined,
+      { timeout: 10_000 },
+    )
+    await page.getByRole('button', { name: 'Expandir Mexicana' }).click()
+    await page.waitForFunction(
+      () => (document.body.innerText ?? '').includes('Tortas y tortas ahogadas'),
+      undefined,
+      { timeout: 10_000 },
+    )
+
+    // Reorder two roots and confirm the order actually changes.
+    const rootsBefore = await rowNames()
+    const pizzaIndexBefore = rootsBefore.indexOf('Pizza')
+
+    await page.getByRole('button', { name: 'Subir Pizza' }).click()
+    await page.waitForTimeout(400)
+
+    const rootsAfter = await rowNames()
+    const pizzaIndexAfter = rootsAfter.indexOf('Pizza')
+
+    if (!(pizzaIndexAfter < pizzaIndexBefore)) {
+      problems.push(`"Subir" did not move Pizza up (${pizzaIndexBefore} -> ${pizzaIndexAfter})`)
+    }
+
+    // Nest it under the sibling above, then promote it back.
+    await page.getByRole('button', { name: 'Anidar Pizza' }).click()
+    await page.waitForTimeout(400)
+    await page.getByRole('button', { name: 'Promover Pizza' }).click()
+    await page.waitForTimeout(400)
+
+    const restored = await rowNames()
+    if (restored.indexOf('Pizza') !== pizzaIndexAfter) {
+      problems.push('indent followed by outdent did not restore the position')
+    }
+
+    // Switching vertical must swap the taxonomy entirely.
+    await page.getByLabel('Vertical').selectOption({ label: 'Licores' })
+    await page.getByText('Destilados').first().waitFor({ state: 'visible', timeout: 15_000 })
+
+    const alcohol = await rowNames()
+    if (alcohol.includes('Mexicana')) {
+      problems.push('restaurant categories still visible after switching to Licores')
+    }
+
+    if (takeShots) {
+      await page.screenshot({ path: `${SHOT_DIR}/categories-tree.png`, fullPage: true })
+    }
+  } catch (error) {
+    problems.push(`category tree check failed: ${error.message}`)
+  }
+
+  report('categories: collapse, reorder, nest, switch vertical', problems)
   await page.close()
 }
 

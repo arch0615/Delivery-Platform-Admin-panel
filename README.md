@@ -84,7 +84,31 @@ scripts/            smoke test
 | 4    | Login and 2FA (A-001, A-002)                 | Done   |
 | 5    | Resource framework (A-005) + Markets (A-011) | Done   |
 | 6    | Zone polygon editor (A-012)                  | Done   |
-| 7    | Taxonomy (A-016 … A-018)                     | Next   |
+| 7    | Taxonomy (A-016, A-017, A-018)               | Done   |
+| 8    | Roles, admin users, settings (A-013 … A-015) | Next   |
+
+## Category tree (A-017)
+
+The one taxonomy screen **not** built on the resource framework: it is a
+hierarchy, not a filterable list, and flattening it into table rows would lose
+the structure that gives it meaning. Per architecture risk AR3 that makes it a
+deliberate exception rather than a drifting one.
+
+`src/lib/tree.ts` holds the operations — build, flatten, indent, outdent,
+reorder, reparent — against the flat `parent_id` + `sort_order` shape the schema
+stores, so what the screen edits is exactly what the API will receive.
+
+Two decisions worth knowing:
+
+- **`canReparent` blocks moving a node into its own subtree.** That would
+  detach the branch from the root and it would vanish from every listing.
+- **Rows with a missing parent render as roots, not dropped.** A filtered view
+  must not hide records; swallowing orphans makes a data problem invisible.
+
+Reordering is by button (up / down / indent / outdent) rather than drag and
+drop. The operations are the hard part and are fully tested; the buttons are
+keyboard accessible, and a drag gesture can be layered on later without
+touching the logic.
 
 ## Zone editor (A-012)
 
