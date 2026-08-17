@@ -23,7 +23,8 @@ import {
 } from '@/lib/auth/mock-auth'
 import { verifyTotp } from '@/lib/auth/totp'
 import { findMarket, liveMarkets, type Market } from '@/lib/markets'
-import { ROLES, hasAnyPermission, hasPermission } from '@/lib/permissions'
+import { hasAnyPermission, hasPermission } from '@/lib/permissions'
+import { findRole } from '@/lib/roles'
 
 /*
  * Session state.
@@ -176,7 +177,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo(() => {
-    const role = user ? ROLES[user.roleCode] : null
+    // Roles are editable data, so a role can be missing - a deleted role must
+    // deny everything rather than crash or silently grant.
+    const role = user ? (findRole(user.roleCode) ?? null) : null
     const permissions = role ? role.permissions : NO_PERMISSIONS
 
     return {

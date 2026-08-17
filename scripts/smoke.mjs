@@ -30,6 +30,10 @@ const ROUTES = [
   { path: '/catalog/verticals', expect: 'Restaurantes', shot: 'verticals' },
   { path: '/catalog/categories', expect: 'Mexicana', shot: 'categories' },
   { path: '/catalog/restricted-items', expect: 'tabaco', shot: null },
+  { path: '/settings/roles', expect: 'Administrador general', shot: 'roles' },
+  { path: '/settings/users', expect: 'alex.ramirez@plataforma.mx', shot: 'admin-users' },
+  { path: '/settings/platform', expect: 'Pago en efectivo', shot: 'platform-settings' },
+  { path: '/audit-log', expect: 'role.update', shot: null },
   { path: '/ui', expect: 'Sistema de diseño', shot: 'ui-gallery' },
   { path: '/no-such-route', expect: 'Página no encontrada', shot: null },
 ]
@@ -664,6 +668,119 @@ for (const testCase of ROLE_CASES) {
   }
 
   report('categories: collapse, reorder, nest, switch vertical', problems)
+  await page.close()
+}
+
+// ------------------------------------------------------- audit + settings ---
+
+/*
+ * A-015 flags and A-007 audit log.
+ *
+ * The claim under test is that a settings change is recorded. A flag toggle
+ * writes an entry, so the log must show it - an audit trail that only exists
+ * on paper is worse than none, because it implies a completeness it lacks.
+ */
+{
+  const page = await context.newPage()
+  const problems = watch(page)
+
+  try {
+    await signIn(page, ADMIN_EMAIL)
+    await page.goto(`${baseUrl}/settings/platform`, { waitUntil: 'networkidle' })
+    await page
+      .getByText('Entrega programada')
+      .first()
+      .waitFor({ state: 'visible', timeout: 15_000 })
+
+    // Toggling a flag must demand a reason before it applies.
+    const row = page.locator('li').filter({ hasText: 'Entrega programada' })
+    await row.getByRole('button', { name: 'Encender' }).click()
+
+    const confirmButton = page.getByRole('button', { name: 'Encender', exact: true }).last()
+    await page.getByLabel('Motivo').waitFor({ state: 'visible', timeout: 10_000 })
+
+    if (!(await confirmButton.isDisabled())) {
+      problems.push('flag confirmation should stay disabled until a reason is given')
+    }
+
+    await page.getByLabel('Motivo').fill('Prueba de humo: activación de entrega programada.')
+    await confirmButton.click()
+
+    await page.waitForFunction(
+      () => !(document.body.innerText ?? '').includes('Motivo'),
+      undefined,
+      { timeout: 10_000 },
+    )
+
+    if (takeShots) {
+      await page.screenshot({ path: `${SHOT_DIR}/platform-settings.png`, fullPage: true })
+    }
+
+    // The change must now appear in the audit log with its reason.
+    //
+    // Navigate IN-APP rather than with page.goto: the mock stores live in
+    // module scope, so a reload resets them and the entry just written would
+    // be gone. Real persistence arrives with the API.
+    await page.getByRole('link', { name: 'Bitácora' }).click()
+    await page.waitForURL(/\/audit-log/, { timeout: 15_000 })
+    await page.waitForFunction(
+      () => (document.body.innerText ?? '').includes('feature_flag.enable'),
+      undefined,
+      { timeout: 15_000 },
+    )
+
+    const logBody = await page.textContent('body')
+    if (!logBody?.includes('Prueba de humo')) {
+      problems.push('the audit entry did not record the reason given')
+    }
+    if (!logBody?.includes('Alex Ramírez')) {
+      problems.push('the audit entry did not record who made the change')
+    }
+
+    if (takeShots) {
+      await page.screenshot({ path: `${SHOT_DIR}/audit-log.png`, fullPage: true })
+    }
+  } catch (error) {
+    problems.push(`settings/audit check failed: ${error.message}`)
+  }
+
+  report('platform: flag toggle needs a reason and is audited', problems)
+  await page.close()
+}
+
+{
+  // A-013: the wildcard role must not be editable or removable.
+  const page = await context.newPage()
+  const problems = watch(page)
+
+  try {
+    await signIn(page, ADMIN_EMAIL)
+    await page.goto(`${baseUrl}/settings/roles`, { waitUntil: 'networkidle' })
+    await page
+      .getByText('Administrador general')
+      .first()
+      .waitFor({ state: 'visible', timeout: 15_000 })
+
+    const row = page.locator('tbody tr').filter({ hasText: 'Administrador general' })
+    await row.getByRole('button', { name: 'Acciones' }).click()
+
+    const deleteItem = page.getByRole('menuitem', { name: 'Eliminar rol' })
+    await deleteItem.waitFor({ state: 'visible', timeout: 10_000 })
+
+    const disabled = await deleteItem.getAttribute('data-disabled')
+    const ariaDisabled = await deleteItem.getAttribute('aria-disabled')
+    if (disabled === null && ariaDisabled !== 'true') {
+      problems.push('deleting the protected super_admin role should be disabled')
+    }
+
+    if (takeShots) {
+      await page.screenshot({ path: `${SHOT_DIR}/roles.png`, fullPage: true })
+    }
+  } catch (error) {
+    problems.push(`roles check failed: ${error.message}`)
+  }
+
+  report('roles: the wildcard role is protected', problems)
   await page.close()
 }
 

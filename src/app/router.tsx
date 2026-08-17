@@ -6,6 +6,10 @@ import { CategoriesPage } from '@/features/catalog/CategoriesPage'
 import { RestrictedItemsPage } from '@/features/catalog/RestrictedItemsPage'
 import { VerticalsPage } from '@/features/catalog/VerticalsPage'
 import { MarketsPage } from '@/features/markets/MarketsPage'
+import { AdminUsersPage } from '@/features/platform/AdminUsersPage'
+import { AuditLogPage } from '@/features/platform/AuditLogPage'
+import { PlatformSettingsPage } from '@/features/platform/PlatformSettingsPage'
+import { RolesPage } from '@/features/platform/RolesPage'
 import { ZonesPage } from '@/features/zones/ZonesPage'
 import { RequireAuth } from '@/app/RequireAuth'
 import { RequirePermission } from '@/app/RequirePermission'
@@ -36,6 +40,10 @@ const BUILT_SCREENS: Record<string, ReactElement> = {
   '/catalog/verticals': <VerticalsPage />,
   '/catalog/categories': <CategoriesPage />,
   '/catalog/restricted-items': <RestrictedItemsPage />,
+  '/settings/roles': <RolesPage />,
+  '/settings/users': <AdminUsersPage />,
+  '/settings/platform': <PlatformSettingsPage />,
+  '/audit-log': <AuditLogPage />,
 }
 
 const generatedRoutes = NAV_GROUPS.flatMap((group) =>

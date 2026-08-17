@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { NAV_GROUPS } from '@/app/nav'
-import { ROLES, hasAnyPermission, hasPermission } from '@/lib/permissions'
+import { NAV_GROUPS, NAV_HOME } from '@/app/nav'
+import {
+  ALL_PERMISSIONS,
+  PERMISSION_CATALOG,
+  ROLES,
+  hasAnyPermission,
+  hasPermission,
+} from '@/lib/permissions'
 
 describe('hasPermission', () => {
   it('matches exactly', () => {
@@ -33,6 +39,60 @@ describe('hasPermission', () => {
   it('hasAnyPermission needs only one match', () => {
     expect(hasAnyPermission(['support.view'], ['finance.view', 'support.view'])).toBe(true)
     expect(hasAnyPermission(['support.view'], ['finance.view', 'orders.refund'])).toBe(false)
+  })
+})
+
+describe('permission catalogue', () => {
+  it('contains every permission the navigation requires', () => {
+    // A permission the catalogue does not list is one nobody can grant, so the
+    // screens it guards are unreachable forever - and nothing would say so.
+    const required = [NAV_HOME, ...NAV_GROUPS.flatMap((group) => group.items)].map(
+      (item) => item.permission,
+    )
+
+    const missing = required.filter((permission) => !ALL_PERMISSIONS.includes(permission))
+    expect(missing).toEqual([])
+  })
+
+  it('grants every catalogued permission to super_admin via the wildcard', () => {
+    const denied = ALL_PERMISSIONS.filter(
+      (permission) => !hasPermission(ROLES.super_admin.permissions, permission),
+    )
+    expect(denied).toEqual([])
+  })
+
+  it('has no duplicate permission keys', () => {
+    expect(new Set(ALL_PERMISSIONS).size).toBe(ALL_PERMISSIONS.length)
+  })
+
+  it('names every permission in domain.action form', () => {
+    for (const permission of ALL_PERMISSIONS) {
+      expect(permission).toMatch(/^[a-z_]+\.[a-z_]+$/)
+    }
+  })
+
+  it('gives every domain a label and at least one permission', () => {
+    for (const domain of PERMISSION_CATALOG) {
+      expect(domain.label.length).toBeGreaterThan(0)
+      expect(domain.permissions.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('marks the money-moving permissions as sensitive', () => {
+    const mustBeSensitive = [
+      'finance.refunds',
+      'finance.payouts',
+      'finance.settlements',
+      'commission.manage',
+      'users.manage',
+    ]
+
+    for (const key of mustBeSensitive) {
+      const definition = PERMISSION_CATALOG.flatMap((domain) => domain.permissions).find(
+        (permission) => permission.key === key,
+      )
+      expect(definition?.sensitive, `${key} should be marked sensitive`).toBe(true)
+    }
   })
 })
 

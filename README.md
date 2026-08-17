@@ -76,16 +76,43 @@ scripts/            smoke test
 
 ## Build progress
 
-| Step | Scope                                        | Status |
-| ---- | -------------------------------------------- | ------ |
-| 1    | Project scaffold, tooling, routing skeleton  | Done   |
-| 2    | Theme layer and base components (A-006)      | Done   |
-| 3    | App shell and navigation (A-003, A-004)      | Done   |
-| 4    | Login and 2FA (A-001, A-002)                 | Done   |
-| 5    | Resource framework (A-005) + Markets (A-011) | Done   |
-| 6    | Zone polygon editor (A-012)                  | Done   |
-| 7    | Taxonomy (A-016, A-017, A-018)               | Done   |
-| 8    | Roles, admin users, settings (A-013 … A-015) | Next   |
+| Step | Scope                                                | Status |
+| ---- | ---------------------------------------------------- | ------ |
+| 1    | Project scaffold, tooling, routing skeleton          | Done   |
+| 2    | Theme layer and base components (A-006)              | Done   |
+| 3    | App shell and navigation (A-003, A-004)              | Done   |
+| 4    | Login and 2FA (A-001, A-002)                         | Done   |
+| 5    | Resource framework (A-005) + Markets (A-011)         | Done   |
+| 6    | Zone polygon editor (A-012)                          | Done   |
+| 7    | Taxonomy (A-016, A-017, A-018)                       | Done   |
+| 8    | Roles, users, settings, audit (A-013 … A-015, A-007) | Done   |
+| 9    | Merchant lifecycle (A-021 … A-028)                   | Next   |
+
+**Sprint 2 of the work schedule is complete** (A-011 … A-018 plus A-007 and
+A-013 … A-015). Sprint 1's foundations landed in steps 1–5.
+
+## Roles, users and the audit trail
+
+Roles are **data**, not a constant — a new role needs no deploy, matching the
+`roles` table. The editor works against a permission catalogue rather than free
+text, because a typo in a permission string is silent: the screens it guards
+simply never appear for anyone holding it. A test asserts every permission
+`nav.ts` references exists in the catalogue.
+
+`super_admin` is protected from editing and deletion. Removing the wildcard
+role is how an organisation locks itself out of its own platform. Deleting any
+role still assigned to an active user is blocked too.
+
+**Every mutation on these screens writes to the audit log**, with before/after
+snapshots and the operator's reason. The smoke test proves the loop rather than
+trusting it: toggle a feature flag, then assert the entry appears in the log
+with the right actor and reason.
+
+### A mock-store caveat
+
+The in-memory stores live in module scope, so **a page reload resets them**.
+Tests that write data then check it elsewhere must navigate in-app, not with
+`page.goto`. Real persistence arrives with the API.
 
 ## Category tree (A-017)
 

@@ -5,7 +5,7 @@ import { useSession } from '@/app/session-context'
 import { Alert, Button, Field, Input } from '@/components/ui'
 import { AuthLayout } from '@/pages/auth/AuthLayout'
 import { ACCOUNTS, DEMO_PASSWORD, MAX_FAILED_ATTEMPTS } from '@/lib/auth/mock-auth'
-import { ROLES } from '@/lib/permissions'
+import { findRole } from '@/lib/roles'
 import { formatDuration } from '@/lib/format'
 
 /*
@@ -184,7 +184,10 @@ function DemoAccounts({ onPick }: { onPick: (email: string) => void }) {
               className="flex w-full items-center justify-between gap-3 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-surface-sunken"
             >
               <span className="truncate text-ink-muted">{account.email}</span>
-              <span className="shrink-0 text-ink-subtle">{ROLES[account.roleCode].name}</span>
+              {/* Live roles, not the seed: a role can be renamed or removed. */}
+              <span className="shrink-0 text-ink-subtle">
+                {findRole(account.roleCode)?.name ?? account.roleCode}
+              </span>
             </button>
           </li>
         ))}
